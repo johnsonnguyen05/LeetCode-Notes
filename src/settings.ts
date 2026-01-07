@@ -1,18 +1,22 @@
 import {App, PluginSettingTab, Setting} from "obsidian";
-import MyPlugin from "./main";
+import LeetCodeNotes from "./main";
 
-export interface MyPluginSettings {
-	mySetting: string;
+export interface LeetCodeNotesSettings {
+	username: string;
+	csrfToken: string;
+	leetcodeSession: string;
 }
 
-export const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+export const DEFAULT_SETTINGS: LeetCodeNotesSettings = {
+	username: '',
+	csrfToken: '',
+	leetcodeSession: ''
 }
 
-export class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+export class LeetCodeNotesSettingTab extends PluginSettingTab {
+	plugin: LeetCodeNotes;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: LeetCodeNotes) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -23,13 +27,35 @@ export class SampleSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Settings #1')
-			.setDesc('It\'s a secret')
+			.setName('Leetcode username')
+			.setDesc('Used for fetching recent submissions')
 			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+				.setPlaceholder('Leetcode username')
+				.setValue(this.plugin.settings.username)
 				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
+					this.plugin.settings.username = value.trim();
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Csrftoken cookie')
+			.setDesc('Value of csrftoken from leetcode.com (kept local)')
+			.addText(text => text
+				.setPlaceholder('Csrftoken')
+				.setValue(this.plugin.settings.csrfToken)
+				.onChange(async (value) => {
+					this.plugin.settings.csrfToken = value.trim();
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Leetcode_session cookie')
+			.setDesc('Value of leetcode_session from leetcode.com (kept local)')
+			.addText(text => text
+				.setPlaceholder('LEETCODE_SESSION')
+				.setValue(this.plugin.settings.leetcodeSession)
+				.onChange(async (value) => {
+					this.plugin.settings.leetcodeSession = value.trim();
 					await this.plugin.saveSettings();
 				}));
 	}

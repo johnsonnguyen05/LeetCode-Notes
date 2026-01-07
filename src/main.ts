@@ -1,72 +1,106 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import { Editor, MarkdownView, Notice, Plugin, htmlToMarkdown } from 'obsidian';
+import { DEFAULT_SETTINGS, LeetCodeNotesSettings, LeetCodeNotesSettingTab} from "./settings";
+import { getRecentSubmissionDetails } from 'leetcode-api/leetcode';
+import { LeetCodeAuthTokens } from 'leetcode-api/types';
+import markdownFormat from 'lib/md-format';
 
-// Remember to rename these classes and interfaces!
+export default class LeetCodeNotes extends Plugin {
+	settings: LeetCodeNotesSettings;
+	
+	private getAuth(): LeetCodeAuthTokens {
+		// Check if required settings are initialized
+		if (!this.settings.username || !this.settings.csrfToken || !this.settings.leetcodeSession) {
+			new Notice('Please configure your leetcode credentials in the plugin settings');
+		}
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+		return {
+			username: this.settings.username,
+			csrfToken: this.settings.csrfToken,
+			leetcodeSession: this.settings.leetcodeSession
+		}
+	}
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
+		// This adds a command so the user can retrieve their latest *accepted* submission from LC 
+		this.addCommand({
+			id: 'insert-recent-submission',
+			name: 'Insert recent submission',
+			callback: async () => {
+				try {
+					const recentSubmissionDetails = await getRecentSubmissionDetails(this.getAuth());
+					if (!recentSubmissionDetails) {
+						console.error("No recent submission details found");
+						new Notice("No recent submission details found");
+						return 
+					}		
+					const difficulty: string = recentSubmissionDetails.submissionDetails.question.difficulty
+					const content: string = htmlToMarkdown(recentSubmissionDetails.submissionDetails.question.content);
+					const recentSubmission: string = recentSubmissionDetails.submissionDetails.code;
+					const recentSubmissionLang: string = recentSubmissionDetails.submissionDetails.lang.name;
+					// const date = new Date(data.submissionDetails.timestamp * 1000);
+					const recentTopics: string[] = recentSubmissionDetails.submissionDetails.question.topicTags.map(tag => tag.name);
+					const topics: string = recentTopics
+						.map(t => `  - "[[${t}]]"`)
+						.join("\n");
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
+					const md = markdownFormat(difficulty, content, topics, recentSubmission, recentSubmissionLang)
+					const fileName = `${recentSubmissionDetails.submissionDetails.question.questionFrontendId}. ${recentSubmissionDetails.submissionDetails.question.title}.md`;
+					const fileExists = this.app.vault.getAbstractFileByPath(fileName) !== null;
+					if (fileExists) {
+						new Notice(`File "${fileName}" already exists in your vault`);
+						return;
 					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+					await this.app.vault.create(fileName, md);
+					new Notice(`Successfully retrieved latest submission`);
+				} catch (err) {
+					new Notice("Failed to fetch code");
+					console.error("Failed to fetch code: ", err);
 				}
-				return false;
+			}
+		})
+
+		this.addCommand({
+			id: 'insert-recent-question',
+			name: 'Insert recent question',
+			editorCallback: async (editor: Editor, view: MarkdownView) => {
+				try {
+					const recentSubmissionDetails = await getRecentSubmissionDetails(this.getAuth());
+					if (!recentSubmissionDetails) {
+						console.error("No recent submission details found");
+						return 
+					}	
+					const recentQuestion = htmlToMarkdown(recentSubmissionDetails.submissionDetails.question.content);
+
+					editor.replaceSelection(recentQuestion);
+				} catch (err) {
+					console.error("Cannot insert recent question", err);
+				}
+			}
+		});
+
+		this.addCommand({
+			id: 'insert-recent-code',
+			name: 'Insert recent code',
+			editorCallback: async (editor: Editor, view: MarkdownView) => {
+				try {
+					const recentSubmissionDetails = await getRecentSubmissionDetails(this.getAuth());
+					if (!recentSubmissionDetails) {
+						console.error("No recent submission details found");
+						return 
+					}	
+					const recentSubmission = recentSubmissionDetails.submissionDetails.code;
+
+					editor.replaceSelection(recentSubmission);
+				} catch (err) {
+					console.error("Cannot insert recent question", err);
+				}
 			}
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+		this.addSettingTab(new LeetCodeNotesSettingTab(this.app, this));
 
 	}
 
@@ -74,26 +108,10 @@ export default class MyPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<LeetCodeNotesSettings>);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
 	}
 }
