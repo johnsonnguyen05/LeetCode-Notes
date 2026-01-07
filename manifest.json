@@ -2,7 +2,7 @@
 	"id": "leetcode-notes",
 	"name": "LeetCode Notes",
 	"version": "1.0.0",
-	"minAppVersion": "0.15.0",
+	"minAppVersion": "1.10.6",
 	"description": "Integrates your LeetCode submissions directly into your vault.",
 	"author": "Johnson Nguyen",
 	"isDesktopOnly": true
